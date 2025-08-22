@@ -1,0 +1,121 @@
+네, 알겠습니다. Streamlit을 사용하여 휴가 관리 프로그램을 완성하기까지의 과정을 1부터 100까지, 즉 아주 상세한 단계로 나누어 설명해 드리겠습니다.
+
+현재 프로젝트 폴더에는 Node.js 방식과 Streamlit 방식의 파일이 섞여 있습니다. 혼란을 줄이고 빠른 개발을 위해 **Streamlit 방식에 집중**하는 것이 좋습니다.
+
+---
+
+### **Part 1: 프로젝트 환경 설정 (1 ~ 30)**
+
+가장 먼저 할 일은 프로젝트 구조를 정리하고, Streamlit 앱을 실행할 준비를 하는 것입니다.
+
+**[1-10] 프로젝트 구조 정리**
+
+1.  **`prisma` 폴더 이동**: `e:\rad_vacation_arrange_helper\server\prisma` 폴더를 `e:\rad_vacation_arrange_helper` 폴더 바로 아래로 이동시켜 주세요.
+    *   결과 경로: `e:\rad_vacation_arrange_helper\prisma`
+2.  **불필요한 `server` 폴더 삭제**: 이제 내용물이 비었거나 불필요한 `e:\rad_vacation_arrange_helper\server` 폴더를 완전히 삭제합니다.
+3.  **`prisma/schema.prisma` 수정**: Prisma가 JavaScript 대신 Python 코드를 생성하도록 스키마 파일을 수정해야 합니다.
+
+    ### e:\rad_vacation_arrange_helper\prisma\schema.prisma
+    
+    `generator client`의 `provider`를 `prisma-client-py`로 변경합니다.
+    
+    ````prisma
+    // filepath: e:\rad_vacation_arrange_helper\prisma\schema.prisma
+    // ...existing code...
+    
+    generator client {
+      provider = "prisma-client-py"
+    }
+    
+    datasource db {
+    // ...existing code...
+    ````
+
+**[11-20] Python 실행 환경 구성**
+
+4.  **터미널 열기**: `e:\rad_vacation_arrange_helper` 폴더에서 터미널(명령 프롬프트, PowerShell 등)을 엽니다.
+5.  **(권장) 가상 환경 생성**: 터미널에 `python -m venv venv`를 입력하여 프로젝트 전용 파이썬 공간을 만듭니다.
+6.  **가상 환경 활성화**: 터미널에 `.\venv\Scripts\activate`를 입력합니다. 이제 터미널 프롬프트 앞에 `(venv)`가 표시됩니다.
+7.  **라이브러리 설치**: 터미널에 `pip install -r requirements.txt`를 입력하여 필요한 라이브러리를 모두 설치합니다.
+
+**[21-30] 데이터베이스 준비**
+
+8.  **데이터베이스 파일 생성**: 터미널에 `prisma db push`를 입력합니다. 이 명령은 `prisma/schema.prisma` 파일을 읽어 `prisma/dev.db` 라는 데이터베이스 파일을 생성합니다.
+9.  **Prisma Python 클라이언트 생성**: 터미널에 `prisma generate`를 입력합니다. 이 명령은 데이터베이스와 통신할 수 있는 Python 코드를 생성합니다.
+
+---
+
+### **Part 2: 애플리케이션 실행 및 기능 개선 (31 ~ 70)**
+
+이제 앱을 실행하고 관리자 기능을 추가하여 프로그램을 더 유용하게 만들 차례입니다.
+
+**[31-40] 첫 실행 및 테스트**
+
+10. **Streamlit 앱 실행**: 터미널에 `streamlit run app.py`를 입력합니다.
+11. **브라우저 확인**: 잠시 후 웹 브라우저에 "🌴 휴가 관리 시스템"이 열립니다.
+12. **회원가입 및 로그인**: 사이드바에서 새 계정을 만들고 로그인하여 휴가 신청 폼과 내역이 잘 보이는지 확인합니다.
+
+**[41-70] 관리자 기능 추가 (승인/반려)**
+
+현재 관리자는 모든 휴가 신청 목록을 보기만 할 수 있습니다. 휴가를 승인하거나 반려하는 기능을 추가해 보겠습니다.
+
+### [app.py](file:///e%3A/rad_vacation_arrange_helper/app.py)
+
+관리자 섹션에 각 휴가 신청 건에 대한 승인/반려 버튼을 추가하고, 버튼을 누르면 데이터베이스 상태가 변경되도록 코드를 수정합니다.
+
+````python
+// ...existing code...
+        # --- (관리자 기능) 모든 휴가 신청 목록 ---
+        if user.isAdmin:
+            st.header("관리자: 모든 휴가 신청")
+            all_requests = await db.vacationrequest.find_many(
+                include={'user': True},
+                order={'createdAt': 'desc'}
+            )
+            if all_requests:
+                for req in all_requests:
+                    with st.container(border=True):
+                        col1, col2, col3 = st.columns([2, 2, 1])
+                        col1.text(f"신청자: {req.user.name}")
+                        col2.text(f"기간: {req.startDate.strftime('%Y-%m-%d')} ~ {req.endDate.strftime('%Y-%m-%d')}")
+                        col3.text(f"상태: {req.status}")
+                        
+                        if req.status == 'PENDING':
+                            approve_key = f"approve-{req.id}"
+                            reject_key = f"reject-{req.id}"
+                            
+                            b_col1, b_col2 = st.columns(2)
+                            if b_col1.button("승인", key=approve_key, use_container_width=True):
+                                await db.vacationrequest.update(where={'id': req.id}, data={'status': 'APPROVED'})
+                                st.rerun()
+
+                            if b_col2.button("반려", key=reject_key, use_container_width=True):
+                                await db.vacationrequest.update(where={'id': req.id}, data={'status': 'REJECTED'})
+                                st.rerun()
+            else:
+                st.info("처리할 휴가 신청이 없습니다.")
+
+
+if __name__ == '__main__':
+// ...existing code...
+````
+
+---
+
+### **Part 3: 관리자 계정 설정 및 배포 (71 ~ 100)**
+
+**[71-80] 관리자 계정 만들기**
+
+13. **DB 편집기 설치**: SQLite 데이터베이스 파일(`dev.db`)을 쉽게 편집하려면 'DB Browser for SQLite'와 같은 무료 도구를 설치하는 것이 좋습니다.
+14. **DB 파일 열기**: `e:\rad_vacation_arrange_helper\prisma\dev.db` 파일을 DB Browser로 엽니다.
+15. **관리자 권한 부여**: `Browse Data` 탭에서 `User` 테이블을 선택합니다. 관리자로 만들고 싶은 사용자의 `isAdmin` 필드 값을 `0`에서 `1`로 변경하고 저장합니다.
+
+**[81-100] 최종 테스트 및 향후 계획**
+
+16. **관리자 기능 테스트**: 앱을 새로고침하고 관리자 계정으로 로그인합니다. 다른 사용자가 신청한 휴가에 '승인'/'반려' 버튼이 나타나는지, 버튼을 눌렀을 때 상태가 잘 바뀌는지 확인합니다.
+17. **(향후) GitHub에 코드 올리기**: `git`을 사용하여 프로젝트를 GitHub 리포지토리에 올립니다.
+18. **(향후) Streamlit Cloud 배포**: GitHub 리포지토리를 Streamlit Community Cloud에 연결하여 다른 사람들도 사용할 수 있는 웹사이트로 만듭니다.
+
+이 순서대로 차근차근 진행하시면 성공적으로 휴가 관리 프로그램을 완성하실 수 있습니다.
+
+변경했습니다.
